@@ -1,0 +1,580 @@
+<!DOCTYPE html>
+<html lang="en">
+<head>
+<meta charset="UTF-8">
+<meta name="viewport" content="width=device-width, initial-scale=1">
+<meta name="theme-color" content="#0b0d12">
+<title>ZIPIUM — Advanced ZIP Creator</title>
+
+<style>
+* { box-sizing:border-box }
+body {
+  margin:0;
+  padding:24px 16px;
+  background:#0b0d12;
+  color:#f4f5fa;
+  font-family:-apple-system,BlinkMacSystemFont,sans-serif;
+}
+main {max-width:720px;margin:auto}
+header {margin:15px 0 28px}
+h1 {font-size:36px;letter-spacing:-1.5px;margin:0}
+p,.muted {color:#9299a9}
+.panel {
+  background:#151923;
+  border:1px solid #292f3d;
+  border-radius:17px;
+  padding:18px;
+  margin-bottom:15px;
+}
+.row {display:flex;justify-content:space-between;align-items:center;gap:12px}
+.drop {
+  border:2px dashed #414b60;
+  border-radius:13px;
+  padding:35px 12px;
+  text-align:center;
+  cursor:pointer;
+}
+.drop.active {border-color:#9584ff;background:#25213b}
+button,input,select {font:inherit}
+button {
+  background:#292f40;color:white;border:0;
+  padding:12px 15px;border-radius:10px;cursor:pointer;
+}
+button.primary {background:#7965ed;width:100%;font-weight:700;padding:16px}
+button:disabled {opacity:.4}
+input[type=text],select {
+  background:#0d111a;border:1px solid #343b4c;
+  color:white;border-radius:9px;padding:12px;width:100%;
+}
+input[type=range] {width:100%;accent-color:#9584ff}
+label {display:block;color:#b5bdcc;font-size:13px;margin:17px 0 8px}
+.value {font-size:24px;font-weight:750;letter-spacing:-.5px}
+.file {
+  display:flex;justify-content:space-between;align-items:center;
+  gap:10px;padding:12px 0;border-bottom:1px solid #292f3d;
+}
+.file-info {min-width:0;flex:1}
+.file-name {overflow-wrap:anywhere;font-size:14px}
+.file-size {font-size:12px;color:#9299a9;margin-top:4px}
+.remove {color:#ff7777;padding:7px}
+details {border-top:1px solid #303747;padding-top:15px;margin-top:15px}
+summary {cursor:pointer;font-weight:650}
+small {color:#9299a9;line-height:1.5}
+.tag {
+  background:#292344;color:#b9aaff;
+  padding:5px 9px;border-radius:20px;font-size:11px;
+}
+.warning {
+  background:#332b1c;border:1px solid #6b542c;
+  color:#e9ca8b;padding:12px;border-radius:10px;
+  font-size:12px;line-height:1.5;margin-top:12px;
+}
+.status {text-align:center;color:#a99bff;font-size:13px;margin:14px}
+.progress {
+  height:7px;background:#292f3d;border-radius:9px;
+  overflow:hidden;margin-top:12px;
+}
+.progress div {height:100%;width:0;background:#9584ff;transition:width .2s}
+footer {text-align:center;color:#777f90;font-size:12px;margin:25px}
+</style>
+</head>
+
+<body>
+<main>
+
+<header>
+  <h1>ZIPIUM<span style="color:#9584ff">.</span></h1>
+  <p>Advanced compression. Your rules.</p>
+  <span class="tag">V0.2 · EXPERIMENTAL</span>
+</header>
+
+<section class="panel">
+  <div class="drop" id="drop">
+    <div style="font-size:36px">📦</div>
+    <h3>Add files to your archive</h3>
+    <p>Choose files or entire folders</p>
+    <button id="browse">Browse files</button>
+    <input id="picker" type="file" multiple hidden>
+    <input id="folderPicker" type="file" multiple webkitdirectory hidden>
+  </div>
+  <div class="row" style="margin-top:13px">
+    <button id="folder">Add folder</button>
+    <button id="clear">Clear all</button>
+  </div>
+</section>
+
+<section class="panel">
+  <div class="row">
+    <strong>Archive contents</strong>
+    <span class="muted" id="count">0 files</span>
+  </div>
+  <div id="files" style="margin-top:12px">
+    <p>No files added.</p>
+  </div>
+  <div class="row" style="margin-top:15px">
+    <span class="muted">Original size</span>
+    <strong id="total">0 B</strong>
+  </div>
+</section>
+
+<section class="panel">
+  <h3>01 / Compression controller</h3>
+
+  <label>Approximate Compression Goal</label>
+  <div class="value" id="goalValue">22.4 MB</div>
+  <input id="goal" type="range" min="0" max="100" value="50">
+  <div class="row">
+    <small>500 KB</small>
+    <small>1 GB</small>
+  </div>
+
+  <button id="maximum" style="width:100%;margin-top:14px">
+    As Much as Possible
+  </button>
+
+  <p id="goalNote" class="muted" style="font-size:12px">
+    Target is an estimate, not a guaranteed output size.
+  </p>
+
+  <label>Compression level</label>
+  <select id="level">
+    <option value="0">0 — Store (no compression)</option>
+    <option value="1">1 — Fastest</option>
+    <option value="3">3 — Fast</option>
+    <option value="5">5 — Moderate</option>
+    <option value="6" selected>6 — Balanced</option>
+    <option value="7">7 — High</option>
+    <option value="8">8 — Very high</option>
+    <option value="9">9 — Maximum</option>
+  </select>
+  <small>DEFLATE compression. Level 9 generally takes more processing time.</small>
+
+  <label>Compression method</label>
+  <select id="method">
+    <option value="deflate">DEFLATE</option>
+    <option value="store">STORE — no compression</option>
+    <option value="auto">AUTO — skip already-compressed formats</option>
+  </select>
+</section>
+
+<section class="panel">
+  <h3>02 / Processing controller</h3>
+
+  <label>Chunk Size</label>
+  <div class="value" id="chunkValue">256 KB</div>
+  <input id="chunk" type="range" min="0" max="14" value="3">
+  <div class="row">
+    <small>32 KB</small>
+    <small id="chunkMax">512 MB</small>
+  </div>
+
+  <div class="warning">
+    Larger chunks can increase memory consumption significantly.
+    They are not the maximum file size or archive size.
+  </div>
+
+  <label>Parallel workers</label>
+  <div class="value" id="workersValue">2</div>
+  <input id="workers" type="range" min="1" max="8" value="2">
+  <small>More workers can improve throughput, but may increase memory usage.</small>
+
+  <label>Archive filename</label>
+  <input id="filename" type="text" value="my-archive">
+</section>
+
+<section class="panel">
+  <h3>03 / Advanced settings</h3>
+
+  <details>
+    <summary>Higher Upper Limit (LAGGY)</summary>
+
+    <p class="muted" style="font-size:12px">
+      Unlock experimental chunk sizes beyond 512 MB.
+    </p>
+
+    <label class="row">
+      Enable experimental limits
+      <input id="highLimit" type="checkbox">
+    </label>
+
+    <div id="experimentalInfo" class="warning">
+      Experimental limits are disabled.
+    </div>
+  </details>
+
+  <details>
+    <summary>Archive options</summary>
+
+    <label class="row">
+      Enable ZIP64
+      <input id="zip64" type="checkbox" checked>
+    </label>
+
+    <label class="row">
+      Use background workers
+      <input id="useWorkers" type="checkbox" checked>
+    </label>
+
+    <label class="row">
+      Preserve folder structure
+      <input id="preserveFolders" type="checkbox" checked>
+    </label>
+  </details>
+</section>
+
+<button class="primary" id="create" disabled>
+  CREATE ZIP ↓
+</button>
+
+<div class="progress"><div id="progress"></div></div>
+<div class="status" id="status" aria-live="polite"></div>
+
+<section class="panel" id="result" hidden>
+  <h3>Compression report</h3>
+  <div class="row">
+    <span class="muted">Original size</span>
+    <strong id="originalResult">—</strong>
+  </div>
+  <div class="row" style="margin-top:12px">
+    <span class="muted">Compressed size</span>
+    <strong id="compressedResult">—</strong>
+  </div>
+  <div class="row" style="margin-top:12px">
+    <span class="muted">Space saved</span>
+    <strong id="savedResult">—</strong>
+  </div>
+  <button id="downloadAgain" style="width:100%;margin-top:16px">
+    Download ZIP again
+  </button>
+</section>
+
+<footer>
+  ZIPIUM v0.2 · Local processing · No server uploads
+</footer>
+</main>
+
+<script type="module">
+import {
+  configure,
+  ZipWriter,
+  BlobWriter,
+  BlobReader
+} from "https://esm.sh/@zip.js/zip.js";
+
+const $ = id => document.getElementById(id);
+
+let files = [];
+let lastBlob = null;
+let lastName = "my-archive.zip";
+
+const normalChunks = [
+  32768,65536,131072,262144,524288,
+  1048576,2097152,4194304,8388608,
+  16777216,33554432,67108864,134217728,
+  268435456,536870912
+];
+
+const experimentalChunks = [
+  ...normalChunks,
+  1073741824,2147483648,4294967296
+];
+
+function fmt(n) {
+  if (n < 1024) return n + " B";
+  const units = ["KB","MB","GB","TB"];
+  let i = -1;
+  do { n /= 1024; i++; } while(n >= 1024 && i < 3);
+  return n.toFixed(2) + " " + units[i];
+}
+
+function goalBytes() {
+  const min = 500 * 1024;
+  const max = 1024 ** 3;
+  return Math.round(min * Math.pow(max/min, Number($("goal").value)/100));
+}
+
+function render() {
+  $("count").textContent = files.length +
+    (files.length === 1 ? " file" : " files");
+
+  $("total").textContent =
+    fmt(files.reduce((s,f)=>s+f.size,0));
+
+  $("create").disabled = !files.length;
+  $("files").replaceChildren();
+
+  if (!files.length) {
+    $("files").textContent = "No files added.";
+    return;
+  }
+
+  files.forEach((f,i)=>{
+    const item = document.createElement("div");
+    item.className = "file";
+
+    const info = document.createElement("div");
+    info.className = "file-info";
+
+    const name = document.createElement("div");
+    name.className = "file-name";
+    name.textContent = f.webkitRelativePath || f.name;
+
+    const size = document.createElement("div");
+    size.className = "file-size";
+    size.textContent = fmt(f.size);
+
+    info.append(name,size);
+
+    const remove = document.createElement("button");
+    remove.className = "remove";
+    remove.textContent = "✕";
+    remove.onclick = ()=>{
+      files.splice(i,1);
+      render();
+    };
+
+    item.append(info,remove);
+    $("files").append(item);
+  });
+}
+
+function addFiles(list) {
+  files.push(...Array.from(list));
+  render();
+}
+
+$("browse").onclick = ()=>$("picker").click();
+$("folder").onclick = ()=>$("folderPicker").click();
+
+$("picker").onchange = e=>{
+  addFiles(e.target.files);
+  e.target.value = "";
+};
+
+$("folderPicker").onchange = e=>{
+  addFiles(e.target.files);
+  e.target.value = "";
+};
+
+$("clear").onclick = ()=>{
+  files = [];
+  render();
+};
+
+const drop = $("drop");
+
+drop.ondragover = e=>{
+  e.preventDefault();
+  drop.classList.add("active");
+};
+
+drop.ondragleave = ()=>{
+  drop.classList.remove("active");
+};
+
+drop.ondrop = e=>{
+  e.preventDefault();
+  drop.classList.remove("active");
+  addFiles(e.dataTransfer.files);
+};
+
+$("goal").oninput = ()=>{
+  $("goalValue").textContent = fmt(goalBytes());
+  $("goalNote").textContent = "Target is an estimate, not a guaranteed output size.";
+};
+
+$("maximum").onclick = ()=>{
+  $("level").value = "9";
+  $("goal").value = "100";
+  $("goalValue").textContent = fmt(goalBytes());
+  $("goalNote").textContent =
+    "Maximum DEFLATE level selected. Actual savings depend on file contents.";
+};
+
+function updateChunk() {
+  const chunks = $("highLimit").checked
+    ? experimentalChunks : normalChunks;
+
+  $("chunk").max = chunks.length - 1;
+
+  const index = Math.min(Number($("chunk").value),chunks.length-1);
+  const value = chunks[index];
+
+  $("chunkValue").textContent = fmt(value);
+  $("chunkMax").textContent = fmt(chunks[chunks.length-1]);
+
+  $("experimentalInfo").textContent = $("highLimit").checked
+    ? "Experimental sizes up to 4 GB are available. Selecting them can exhaust browser memory or crash the tab."
+    : "Experimental limits are disabled. Maximum chunk size: 512 MB.";
+
+  return value;
+}
+
+$("chunk").oninput = updateChunk;
+
+$("highLimit").onchange = ()=>{
+  $("chunk").value = 3;
+  updateChunk();
+};
+
+$("workers").oninput = ()=>{
+  $("workersValue").textContent = $("workers").value;
+};
+
+function safeName(file) {
+  let name = file.webkitRelativePath || file.name;
+
+  if (!$("preserveFolders").checked)
+    name = file.name;
+
+  return name.replace(/^\/+/, "");
+}
+
+const compressedExtensions =
+  /\.(zip|gz|bz2|xz|7z|rar|mp3|mp4|m4a|mkv|jpg|jpeg|png|webp|avif|heic|pdf|woff2)$/i;
+
+function methodFor(file) {
+  const method = $("method").value;
+
+  if (method === "store") return 0;
+
+  if (method === "auto" && compressedExtensions.test(file.name))
+    return 0;
+
+  return 8;
+}
+
+$("create").onclick = async ()=>{
+  if (!files.length) return;
+
+  const button = $("create");
+  button.disabled = true;
+  button.textContent = "BUILDING ARCHIVE...";
+
+  $("result").hidden = true;
+  $("progress").style.width = "0%";
+  $("status").textContent = "Preparing compression...";
+
+  try {
+    const chunkSize = updateChunk();
+    const workerCount = Number($("workers").value);
+
+    if (chunkSize >= 512 * 1024 * 1024) {
+      const accepted = confirm(
+        "This chunk size may use substantial memory and could crash your browser. Continue?"
+      );
+      if (!accepted) return;
+    }
+
+    if (chunkSize >= 2 * 1024 ** 3) {
+      const accepted = confirm(
+        "You selected an extremely large 2–4 GB chunk size. This is experimental and not recommended on mobile devices. Continue?"
+      );
+      if (!accepted) return;
+    }
+
+    configure({
+      chunkSize,
+      maxWorkers: workerCount,
+      useWebWorkers: $("useWorkers").checked
+    });
+
+    const level = Number($("level").value);
+
+    const writer = new ZipWriter(
+      new BlobWriter("application/zip"),
+      {
+        level,
+        zip64: $("zip64").checked,
+        useWebWorkers: $("useWorkers").checked
+      }
+    );
+
+    for (let i=0; i<files.length; i++) {
+      const file = files[i];
+
+      $("status").textContent =
+        `Compressing ${i+1}/${files.length}: ${file.name}`;
+
+      await writer.add(
+        safeName(file),
+        new BlobReader(file),
+        {
+          compressionMethod: methodFor(file),
+          level,
+          zip64: $("zip64").checked
+        }
+      );
+
+      $("progress").style.width =
+        ((i+1)/files.length*90) + "%";
+    }
+
+    $("status").textContent = "Finalizing ZIP archive...";
+
+    const blob = await writer.close();
+
+    lastBlob = blob;
+
+    let name = $("filename").value.trim()
+      .replace(/[\\/:*?"<>|]/g,"_");
+
+    if (!name) name = "my-archive";
+    lastName = name.endsWith(".zip") ? name : name+".zip";
+
+    const original = files.reduce((s,f)=>s+f.size,0);
+    const saved = original - blob.size;
+    const percent = original
+      ? (saved/original*100).toFixed(2)
+      : "0.00";
+
+    $("originalResult").textContent = fmt(original);
+    $("compressedResult").textContent = fmt(blob.size);
+    $("savedResult").textContent =
+      `${fmt(saved)} (${percent}%)`;
+
+    $("result").hidden = false;
+    $("progress").style.width = "100%";
+
+    download();
+
+    const goal = $("goal").value === "100"
+      ? "Maximum compression selected."
+      : `Goal: ${fmt(goalBytes())}. ` +
+        (blob.size <= goalBytes()
+          ? "Target reached."
+          : "Target not reached; no data was discarded.");
+
+    $("status").textContent =
+      `Archive created! ${goal}`;
+
+  } catch (error) {
+    console.error(error);
+    $("status").textContent =
+      "Compression failed: " + error.message;
+  } finally {
+    button.disabled = files.length === 0;
+    button.textContent = "CREATE ZIP ↓";
+  }
+};
+
+function download() {
+  if (!lastBlob) return;
+
+  const url = URL.createObjectURL(lastBlob);
+  const a = document.createElement("a");
+  a.href = url;
+  a.download = lastName;
+  a.click();
+
+  setTimeout(()=>URL.revokeObjectURL(url),60000);
+}
+
+$("downloadAgain").onclick = download;
+
+$("goalValue").textContent = fmt(goalBytes());
+updateChunk();
+render();
+</script>
+</body>
+</html>
