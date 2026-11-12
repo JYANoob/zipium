@@ -157,6 +157,27 @@ footer {text-align:center;color:#777f90;font-size:12px;margin:25px}
   </select>
 </section>
 
+
+<div style="border-top:1px solid #303747;margin-top:20px;padding-top:15px">
+  <h3>Media optimization</h3>
+
+  <label>Optimization mode</label>
+  <select id="mediaMode">
+    <option value="none">Off — Original files</option>
+    <option value="jpeg">Optimize JPEG images</option>
+  </select>
+
+  <label>JPEG quality</label>
+  <div class="value" id="qualityValue">75%</div>
+  <input id="quality" type="range" min="10" max="100" value="75">
+
+  <small>
+    Lower quality generally produces smaller JPEG files.
+    Original files remain untouched. Only JPEG files are optimized.
+  </small>
+</div>
+
+
 <section class="panel">
   <h3>02 / Processing controller</h3>
 
@@ -444,6 +465,74 @@ function methodFor(file) {
   return 8;
 }
 
+
+$("quality").oninput = () => {
+  $("qualityValue").textContent = $("quality").value + "%";
+};
+
+async function optimizeJPEG(file, quality) {
+  const isJPEG =
+    file.type === "image/jpeg" ||
+    /\.(jpe?g)$/i.test(file.name);
+
+  if (!isJPEG) {
+    return {
+      blob: file,
+      optimized: false
+    };
+  }
+
+  let bitmap;
+
+  try {
+    bitmap = await createImageBitmap(file);
+
+    const canvas = document.createElement("canvas");
+    canvas.width = bitmap.width;
+    canvas.height = bitmap.height;
+
+    const ctx = canvas.getContext("2d");
+
+    if (!ctx) throw new Error("Canvas unavailable");
+
+    ctx.drawImage(bitmap, 0, 0);
+    bitmap.close();
+
+    const output = await new Promise((resolve, reject) => {
+      canvas.toBlob(
+        blob => blob
+          ? resolve(blob)
+          : reject(new Error("JPEG encoding failed")),
+        "image/jpeg",
+        quality
+      );
+    });
+
+    // Never replace the original with a larger result.
+    if (output.size >= file.size) {
+      return {
+        blob: file,
+        optimized: false
+      };
+    }
+
+    return {
+      blob: output,
+      optimized: true
+    };
+
+  } catch (error) {
+    if (bitmap) bitmap.close();
+    console.warn("Image optimization skipped:", error);
+
+    return {
+      blob: file,
+      optimized: false
+    };
+  }
+}
+
+
 $("create").onclick = async ()=>{
   if (!files.length) return;
 
@@ -491,14 +580,28 @@ $("create").onclick = async ()=>{
     );
 
     for (let i=0; i<files.length; i++) {
-      const file = files[i];
+      
+const file = files[i];
 
-      $("status").textContent =
-        `Compressing ${i+1}/${files.length}: ${file.name}`;
+$("status").textContent =
+  `Processing ${i+1}/${files.length}: ${file.name}`;
+
+let archiveBlob = file;
+
+if ($("mediaMode").value === "jpeg") {
+  const quality = Number($("quality").value) / 100;
+
+  const result = await optimizeJPEG(file, quality);
+  archiveBlob = result.blob;
+}
+
+$("status").textContent =
+  `Compressing ${i+1}/${files.length}: ${file.name}`;
+
 
       await writer.add(
         safeName(file),
-        new BlobReader(file),
+        new BlobReader(archiveBlob),
         {
           compressionMethod: methodFor(file),
           level,
